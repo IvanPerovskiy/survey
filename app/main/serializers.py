@@ -191,6 +191,20 @@ class TakeSurveySerializer(serializers.Serializer):
         return instance
 
 
+class AnswerSerializerResults(serializers.Serializer):
+    survey_id = serializers.IntegerField()
+    question_id = serializers.IntegerField()
+    question = serializers.CharField(max_length=1500)
+    answer = serializers.CharField(max_length=1500)
+
+
+class AnswerSerializerList(serializers.Serializer):
+    user_id = serializers.IntegerField()
+    results = AnswerSerializerResults(many=True)
+
+
+class AnswerSerializerRequest(serializers.Serializer):
+    user_id = serializers.IntegerField()
 
 
 

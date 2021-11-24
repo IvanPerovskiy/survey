@@ -16,8 +16,10 @@ from drf_yasg.utils import swagger_auto_schema
 
 from .models import Survey, Question, AnswerChoice, User, UserRole, Answer
 from .serializers import SurveySerializer, SurveySerializerCreate, SurveySerializerUpdate, \
-    LoginSerializer, CredentialsSerializer, QuestionSerializer, TakeSurveySerializer
+    LoginSerializer, CredentialsSerializer, QuestionSerializer, TakeSurveySerializer, AnswerSerializerList, \
+    AnswerSerializerRequest
 from main.decorators import admin_required
+from main.responses import *
 
 
 class UserViewSet(
@@ -26,6 +28,8 @@ class UserViewSet(
 
     queryset = User.objects.all()
     serializer_class = LoginSerializer
+
+    login_response = openapi.Response(SUCCESS_RESPONSE, CredentialsSerializer)
 
     def __set_refreshtoken_cookie(self, response, refresh_token):
         response.set_cookie(
@@ -56,6 +60,10 @@ class UserViewSet(
 
         return response
 
+    @swagger_auto_schema(responses={
+        200: login_response,
+        400: BAD_REQUEST
+    })
     @action(
         detail=False,
         methods=['post'],
@@ -65,6 +73,9 @@ class UserViewSet(
     @authentication_classes([])
     @permission_classes([])
     def login(self, request, **kwargs):
+        """
+        Авторизация в системе
+        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         current_user = User.objects.filter(
@@ -97,6 +108,10 @@ class SurveyViewset(viewsets.GenericViewSet, ListModelMixin, RetrieveModelMixin)
     ordering_fields = ['created', 'start_date', 'end_date']
     ordering = ['-created']
 
+    answer_param = openapi.Parameter('user_id', openapi.IN_QUERY, type=openapi.TYPE_INTEGER)
+    survey_response = openapi.Response(SUCCESS_RESPONSE, SurveySerializer)
+    answer_response = openapi.Response(SUCCESS_RESPONSE, AnswerSerializerList)
+
     def get_serializer_class(self):
         if self.action == 'create':
             return SurveySerializerCreate
@@ -104,15 +119,34 @@ class SurveyViewset(viewsets.GenericViewSet, ListModelMixin, RetrieveModelMixin)
             return SurveySerializerUpdate
         return self.serializer_class
 
+    @swagger_auto_schema(responses={
+        201: survey_response,
+        400: BAD_REQUEST,
+        404: NOT_FOUND
+    })
     @admin_required
     def create(self, request, *args, **kwargs):
+        """
+        Создание опроса
+        Доступно только администратору
+        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
         return Response(data=SurveySerializer(instance).data, status=status.HTTP_201_CREATED)
 
+    @swagger_auto_schema(responses={
+        200: survey_response,
+        400: BAD_REQUEST,
+        404: NOT_FOUND
+
+    })
     @admin_required
     def update(self, request, *args, **kwargs):
+        """
+        Изменение опроса
+        Доступно только администратору
+        """
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -121,11 +155,21 @@ class SurveyViewset(viewsets.GenericViewSet, ListModelMixin, RetrieveModelMixin)
 
     @admin_required
     def destroy(self, request, pk=None):
+        """
+        Удаление опроса
+        Доступно только администратору
+        В реальности опрос не удаляется, просто ставится флаг
+        """
         instance = get_object_or_404(self.queryset, pk=pk)
         instance.is_deleted = True
         instance.save()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @swagger_auto_schema(responses={
+        201: SUCCESS_RESPONSE,
+        400: BAD_REQUEST,
+        404: NOT_FOUND
+    })
     @action(
         detail=True,
         url_path='take',
@@ -141,14 +185,22 @@ class SurveyViewset(viewsets.GenericViewSet, ListModelMixin, RetrieveModelMixin)
         serializer.save()
         return Response(status=status.HTTP_201_CREATED)
 
+    @swagger_auto_schema(manual_parameters=[answer_param], responses={
+        200: answer_response,
+        400: BAD_REQUEST
+    })
     @action(
         detail=False,
         url_path='answers',
         methods=['get'],
         permission_classes=(AllowAny,),
+        serializer_class=AnswerSerializerRequest
     )
     @authentication_classes([])
     def get_answers(self, request, *args, **kwargs):
+        """
+        Получение всех ответов по user_id
+        """
         user = User.objects.filter(external_id=int(request.query_params.get('user_id', -1)))
         if not user:
             return Response(status=status.HTTP_404_NOT_FOUND)
@@ -185,21 +237,34 @@ class QuestionViewset(viewsets.GenericViewSet, ListModelMixin, RetrieveModelMixi
 
     @admin_required
     def create(self, request, *args, **kwargs):
+        """
+        Создание вопроса
+        Доступно только администратору
+        """
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
-        return Response(data=SurveySerializer(instance).data, status=status.HTTP_201_CREATED)
+        return Response(data=QuestionSerializer(instance).data, status=status.HTTP_201_CREATED)
 
     @admin_required
     def update(self, request, *args, **kwargs):
+        """
+        Изменение вопроса
+        Доступно только администратору
+        """
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data)
         serializer.is_valid(raise_exception=True)
         instance = serializer.save()
-        return Response(data=SurveySerializer(instance).data, status=status.HTTP_200_OK)
+        return Response(data=QuestionSerializer(instance).data, status=status.HTTP_200_OK)
 
     @admin_required
     def destroy(self, request, pk=None):
+        """
+        Удаление вопроса
+        Доступно только администратору
+        В реальности опрос не удаляется, просто ставится флаг
+        """
         instance = Question.objects.filter(pk=pk).first()
         if not instance:
             return Response(status=status.HTTP_404_NOT_FOUND)
