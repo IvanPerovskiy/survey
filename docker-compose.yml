@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  app:
+    image: python:3.9
+    container_name: backend
+    build:
+      context: ./app
+    entrypoint: ./entrypoint.sh
+    ports:
+      - 8000:8000
+    command: "python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./app/:/app/
+    depends_on:
+      - db
+
+  db:
+    container_name: db
+    image: postgres:10
+    ports:
+      - 5432:5432
+    volumes:
+      - survey_db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+volumes:
+    survey_db:
